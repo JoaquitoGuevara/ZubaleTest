@@ -39,6 +39,7 @@ export function AppRoot(): React.JSX.Element {
 
   const lastOnline = useRef<boolean | null>(null);
   const lastServerOn = useRef<boolean | null>(null);
+  const serverEnableTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     dispatch(initializeApplication());
@@ -86,9 +87,26 @@ export function AppRoot(): React.JSX.Element {
     }).catch(() => undefined);
 
     return () => {
+      if (serverEnableTimeout.current) {
+        clearTimeout(serverEnableTimeout.current);
+        serverEnableTimeout.current = null;
+      }
       unregisterBackgroundSync().catch(() => undefined);
     };
   }, [dispatch]);
+
+  const disableServerForTenSeconds = () => {
+    if (serverEnableTimeout.current) {
+      clearTimeout(serverEnableTimeout.current);
+    }
+
+    dispatch(setFakeServerAvailable(false));
+
+    serverEnableTimeout.current = setTimeout(() => {
+      dispatch(setFakeServerAvailable(true));
+      serverEnableTimeout.current = null;
+    }, 10000);
+  };
 
   useEffect(() => {
     if (!selectedTask) {
@@ -152,7 +170,7 @@ export function AppRoot(): React.JSX.Element {
         onToggleForceConflictForNextSync={value =>
           dispatch(setForceConflictForNextSyncRequest(value))
         }
-        onRunSyncNow={() => dispatch(runSyncNow())}
+        onDisableServerForTenSeconds={disableServerForTenSeconds}
       />
 
       {board.errorMessage ? (

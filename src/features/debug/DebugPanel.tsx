@@ -9,7 +9,7 @@ interface DebugPanelProps {
   conflictLength: number;
   onToggleFakeServerAvailability: (value: boolean) => void;
   onToggleForceConflictForNextSync: (value: boolean) => void;
-  onRunSyncNow: () => void;
+  onDisableServerForTenSeconds: () => void;
 }
 
 export function DebugPanel({
@@ -20,7 +20,7 @@ export function DebugPanel({
   conflictLength,
   onToggleFakeServerAvailability,
   onToggleForceConflictForNextSync,
-  onRunSyncNow,
+  onDisableServerForTenSeconds,
 }: DebugPanelProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -63,8 +63,8 @@ export function DebugPanel({
               styles.syncNowButton,
               pressed ? styles.pressedBlackBackground : null,
             ]}
-            onPress={onRunSyncNow}>
-            <Text style={styles.syncNowButtonLabel}>Run sync now</Text>
+            onPress={onDisableServerForTenSeconds}>
+            <Text style={styles.syncNowButtonLabel}>Disable server for 10s</Text>
           </Pressable>
         </View>
       ) : null}
