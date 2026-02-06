@@ -14,7 +14,6 @@ import {
   saveTaskChangesAndQueueSync,
 } from '../state/taskBoardThunks';
 import {
-  setActiveFilter,
   setFakeServerAvailable,
   setForceConflictForNextSyncRequest,
   setNetworkConnected,
@@ -120,14 +119,7 @@ export function AppRoot(): React.JSX.Element {
       ) : (
         <TaskListScreen
           tasks={allTasks}
-          activeFilter={taskBoardState.activeFilter}
-          queueLength={queueLength}
-          conflictLength={conflictLength}
-          lastSyncSummary={taskBoardState.lastSyncSummary}
-          syncInProgress={taskBoardState.syncInProgress}
-          onFilterChange={nextFilter => dispatch(setActiveFilter(nextFilter))}
           onSelectTask={taskId => dispatch(setSelectedTaskId(taskId))}
-          onRunSyncNow={() => dispatch(runSyncNow('manual-trigger'))}
         />
       )}
 
