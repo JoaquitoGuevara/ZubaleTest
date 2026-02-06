@@ -1,44 +1,30 @@
-import {LocalTaskUpdateInput, SyncCycleReport} from '../domain/taskModels';
+import {TaskPatch} from '../domain/taskModels';
 import {
   acceptServerConflictResolution,
   initializeLocalDatabase,
-  readLocalDatabaseSnapshot,
+  readSnapshot,
   retryLocalConflictResolution,
   saveTaskUpdateAndQueueSync,
 } from '../infrastructure/database/taskRepository';
 import {
-  clearForceConflictForNextSyncRequestFlag,
+  clearForceConflictNextSync,
   setFakeServerAvailability,
-  setForceConflictForNextSyncRequest as setFakeServerConflictForNextRequest,
+  setForceConflictNextSync,
 } from '../infrastructure/fakeServer/fakeServerGateway';
-import {runTaskSyncCycle} from '../sync/syncEngine';
+import {syncQueue} from '../sync/syncEngine';
 import {
-  replaceLocalDatabaseSnapshot,
+  setData,
   setErrorMessage,
   setForceConflictForNextSyncRequest,
   setInitializationCompleted,
-  setLastSyncSummary,
   setLoading,
   setSyncInProgress,
 } from './taskBoardSlice';
 import {AppThunk, RootState} from './store';
 
-function createSyncSummaryText(syncCycleReport: SyncCycleReport): string {
-  if (syncCycleReport.skippedBecauseSyncAlreadyRunning) {
-    return `Sync skipped: another cycle is already running (${syncCycleReport.reason}).`;
-  }
-
-  if (syncCycleReport.skippedBecauseOffline) {
-    return `Sync skipped: device is offline (${syncCycleReport.reason}).`;
-  }
-
-  return `Sync ${syncCycleReport.reason}: checked ${syncCycleReport.queuedItemsChecked}, synced ${syncCycleReport.syncedItemsCount}, conflicts ${syncCycleReport.conflictItemsCount}, failed ${syncCycleReport.failedItemsCount}.`;
-}
-
-export const refreshLocalSnapshot = (): AppThunk<Promise<void>> => {
+export const refreshData = (): AppThunk<Promise<void>> => {
   return async dispatch => {
-    const localDatabaseSnapshot = await readLocalDatabaseSnapshot();
-    dispatch(replaceLocalDatabaseSnapshot(localDatabaseSnapshot));
+    dispatch(setData(await readSnapshot()));
   };
 };
 
@@ -49,11 +35,12 @@ export const initializeApplication = (): AppThunk<Promise<void>> => {
 
     try {
       await initializeLocalDatabase();
-      await dispatch(refreshLocalSnapshot());
+      await dispatch(refreshData());
       dispatch(setInitializationCompleted(true));
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown initialization error';
-      dispatch(setErrorMessage(errorMessage));
+      dispatch(
+        setErrorMessage(error instanceof Error ? error.message : 'Initialization failed'),
+      );
     } finally {
       dispatch(setLoading(false));
     }
@@ -62,37 +49,35 @@ export const initializeApplication = (): AppThunk<Promise<void>> => {
 
 export const saveTaskChangesAndQueueSync = (
   taskId: string,
-  localTaskUpdateInput: LocalTaskUpdateInput,
+  patch: TaskPatch,
 ): AppThunk<Promise<void>> => {
   return async dispatch => {
     dispatch(setErrorMessage(null));
 
     try {
-      await saveTaskUpdateAndQueueSync(taskId, localTaskUpdateInput);
-      await dispatch(refreshLocalSnapshot());
-      await dispatch(runSyncNow('local-task-update'));
+      await saveTaskUpdateAndQueueSync(taskId, patch);
+      await dispatch(refreshData());
+      await dispatch(runSyncNow());
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown save error';
-      dispatch(setErrorMessage(errorMessage));
+      dispatch(setErrorMessage(error instanceof Error ? error.message : 'Save failed'));
     }
   };
 };
 
-function applyFakeServerFlagsFromCurrentState(rootState: RootState): void {
-  setFakeServerAvailability(rootState.taskBoard.fakeServerAvailable);
+function applyServerFlags(state: RootState): void {
+  setFakeServerAvailability(state.taskBoard.fakeServerAvailable);
 
-  if (rootState.taskBoard.forceConflictForNextSyncRequest) {
-    setFakeServerConflictForNextRequest(true);
+  if (state.taskBoard.forceConflictForNextSyncRequest) {
+    setForceConflictNextSync(true);
   }
 }
 
-interface RunSyncNowOptions {
+interface SyncOptions {
   ignoreRetryWindow?: boolean;
 }
 
 export const runSyncNow = (
-  reason: string,
-  options: RunSyncNowOptions = {},
+  options: SyncOptions = {},
 ): AppThunk<Promise<void>> => {
   return async (dispatch, getState) => {
     if (getState().taskBoard.syncInProgress) {
@@ -103,25 +88,22 @@ export const runSyncNow = (
     dispatch(setErrorMessage(null));
 
     try {
-      const stateBeforeSync = getState();
-      applyFakeServerFlagsFromCurrentState(stateBeforeSync);
+      const state = getState();
+      applyServerFlags(state);
 
-      const syncCycleReport = await runTaskSyncCycle({
-        reason,
-        deviceIsOnline: stateBeforeSync.taskBoard.networkConnected,
+      await syncQueue({
+        online: state.taskBoard.networkConnected,
         ignoreRetryWindow: Boolean(options.ignoreRetryWindow),
       });
 
-      if (stateBeforeSync.taskBoard.forceConflictForNextSyncRequest) {
-        clearForceConflictForNextSyncRequestFlag();
+      if (state.taskBoard.forceConflictForNextSyncRequest) {
+        clearForceConflictNextSync();
         dispatch(setForceConflictForNextSyncRequest(false));
       }
 
-      await dispatch(refreshLocalSnapshot());
-      dispatch(setLastSyncSummary(createSyncSummaryText(syncCycleReport)));
+      await dispatch(refreshData());
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown sync error';
-      dispatch(setErrorMessage(errorMessage));
+      dispatch(setErrorMessage(error instanceof Error ? error.message : 'Sync failed'));
     } finally {
       dispatch(setSyncInProgress(false));
     }
@@ -136,11 +118,11 @@ export const resolveConflictByAcceptingServer = (
 
     try {
       await acceptServerConflictResolution(taskId);
-      await dispatch(refreshLocalSnapshot());
+      await dispatch(refreshData());
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown conflict resolution error';
-      dispatch(setErrorMessage(errorMessage));
+      dispatch(
+        setErrorMessage(error instanceof Error ? error.message : 'Conflict resolve failed'),
+      );
     }
   };
 };
@@ -153,12 +135,12 @@ export const resolveConflictByRetryingLocal = (
 
     try {
       await retryLocalConflictResolution(taskId);
-      await dispatch(refreshLocalSnapshot());
-      await dispatch(runSyncNow('retry-local-conflict'));
+      await dispatch(refreshData());
+      await dispatch(runSyncNow());
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown conflict retry error';
-      dispatch(setErrorMessage(errorMessage));
+      dispatch(
+        setErrorMessage(error instanceof Error ? error.message : 'Conflict retry failed'),
+      );
     }
   };
 };

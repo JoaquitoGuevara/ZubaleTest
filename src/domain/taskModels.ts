@@ -1,28 +1,18 @@
-export type TaskBusinessStatus = 'available' | 'in_progress' | 'done' | 'cancelled';
+export type TaskStatus = 'available' | 'in_progress' | 'done' | 'cancelled';
 
-export type TaskSyncStatus = 'pending_sync' | 'syncing' | 'synced' | 'error' | 'conflict';
+export type SyncStatus = 'pending_sync' | 'syncing' | 'synced' | 'error' | 'conflict';
 
-export type TaskFilterOption =
-  | 'all'
-  | 'pending_sync'
-  | 'syncing'
-  | 'synced'
-  | 'error'
-  | 'conflict';
-
-export interface TaskLocation {
-  latitude: number;
-  longitude: number;
-  address: string;
-}
-
-export interface TaskRecord {
+export interface Task {
   id: string;
   title: string;
   price: number;
-  businessStatus: TaskBusinessStatus;
-  syncStatus: TaskSyncStatus;
-  location: TaskLocation;
+  businessStatus: TaskStatus;
+  syncStatus: SyncStatus;
+  location: {
+    latitude: number;
+    longitude: number;
+    address: string;
+  };
   imageUri: string | null;
   expiresAt: string;
   notes: string;
@@ -31,14 +21,12 @@ export interface TaskRecord {
   lastSyncedAt: string | null;
 }
 
-export type QueueActionType = 'UPSERT_TASK';
-
 export type QueueState = 'queued' | 'processing' | 'failed';
 
-export interface SyncQueueRecord {
+export interface QueueItem {
   id: string;
   taskId: string;
-  actionType: QueueActionType;
+  actionType: 'UPSERT_TASK';
   payloadJson: string;
   state: QueueState;
   attemptCount: number;
@@ -48,36 +36,24 @@ export interface SyncQueueRecord {
   updatedAt: string;
 }
 
-export type ConflictResolution = 'pending' | 'accept_server' | 'retry_local';
-
-export interface ConflictRecord {
+export interface Conflict {
   id: string;
   taskId: string;
   serverPayloadJson: string;
   localPayloadJson: string;
-  resolution: ConflictResolution;
+  resolution: 'pending' | 'accept_server' | 'retry_local';
   createdAt: string;
   resolvedAt: string | null;
 }
 
-export interface LocalTaskUpdateInput {
-  businessStatus?: TaskBusinessStatus;
+export interface TaskPatch {
+  businessStatus?: TaskStatus;
   notes?: string;
   imageUri?: string | null;
 }
 
-export interface LocalDatabaseSnapshot {
-  tasks: TaskRecord[];
-  queueItems: SyncQueueRecord[];
-  conflicts: ConflictRecord[];
-}
-
-export interface SyncCycleReport {
-  reason: string;
-  queuedItemsChecked: number;
-  syncedItemsCount: number;
-  conflictItemsCount: number;
-  failedItemsCount: number;
-  skippedBecauseOffline: boolean;
-  skippedBecauseSyncAlreadyRunning: boolean;
+export interface Snapshot {
+  tasks: Task[];
+  queueItems: QueueItem[];
+  conflicts: Conflict[];
 }

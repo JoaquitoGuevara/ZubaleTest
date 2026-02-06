@@ -1,10 +1,10 @@
 import React from 'react';
 import {FlatList, StyleSheet, Text, View} from 'react-native';
-import {TaskRecord} from '../../domain/taskModels';
+import {Task} from '../../domain/taskModels';
 import {TaskRow} from './TaskRow';
 
 interface TaskListScreenProps {
-  tasks: TaskRecord[];
+  tasks: Task[];
   onSelectTask: (taskId: string) => void;
 }
 
@@ -26,7 +26,7 @@ export function TaskListScreen({
 
       <FlatList
         data={tasks}
-        keyExtractor={taskRecord => taskRecord.id}
+        keyExtractor={task => task.id}
         contentContainerStyle={styles.listContentContainer}
         ItemSeparatorComponent={ListSeparator}
         initialNumToRender={12}
@@ -36,8 +36,8 @@ export function TaskListScreen({
         removeClippedSubviews
         renderItem={({item}) => (
           <TaskRow
-            taskRecord={item}
-            hasPendingConflict={item.syncStatus === 'conflict'}
+            task={item}
+            hasConflict={item.syncStatus === 'conflict'}
             onSelectTask={onSelectTask}
           />
         )}

@@ -1,10 +1,6 @@
-import {
-  TaskBusinessStatus,
-  TaskFilterOption,
-  TaskSyncStatus,
-} from '../domain/taskModels';
+import {SyncStatus, TaskStatus} from '../domain/taskModels';
 
-export function getTaskBusinessStatusLabel(status: TaskBusinessStatus): string {
+export function taskStatusLabel(status: TaskStatus): string {
   if (status === 'available') {
     return 'Available';
   }
@@ -17,7 +13,7 @@ export function getTaskBusinessStatusLabel(status: TaskBusinessStatus): string {
   return 'Cancelled';
 }
 
-export function getTaskSyncStatusLabel(status: TaskSyncStatus): string {
+export function syncStatusLabel(status: SyncStatus): string {
   if (status === 'pending_sync') {
     return 'Pending Sync';
   }
@@ -33,26 +29,7 @@ export function getTaskSyncStatusLabel(status: TaskSyncStatus): string {
   return 'Conflict';
 }
 
-export function getFilterLabel(filter: TaskFilterOption): string {
-  if (filter === 'all') {
-    return 'All';
-  }
-  if (filter === 'pending_sync') {
-    return 'Pending';
-  }
-  if (filter === 'syncing') {
-    return 'Syncing';
-  }
-  if (filter === 'synced') {
-    return 'Synced';
-  }
-  if (filter === 'error') {
-    return 'Errors';
-  }
-  return 'Conflicts';
-}
-
-export function getSyncStatusBadgeBackgroundColor(status: TaskSyncStatus): string {
+export function syncBadgeBg(status: SyncStatus): string {
   if (status === 'pending_sync') {
     return '#FFF4E5';
   }
@@ -68,7 +45,7 @@ export function getSyncStatusBadgeBackgroundColor(status: TaskSyncStatus): strin
   return '#FEE8FF';
 }
 
-export function getSyncStatusBadgeTextColor(status: TaskSyncStatus): string {
+export function syncBadgeText(status: SyncStatus): string {
   if (status === 'pending_sync') {
     return '#8A5000';
   }

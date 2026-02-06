@@ -1,50 +1,50 @@
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {TaskRecord} from '../../domain/taskModels';
+import {Task} from '../../domain/taskModels';
 import {
-  getSyncStatusBadgeBackgroundColor,
-  getSyncStatusBadgeTextColor,
-  getTaskBusinessStatusLabel,
-  getTaskSyncStatusLabel,
+  syncBadgeBg,
+  syncBadgeText,
+  syncStatusLabel,
+  taskStatusLabel,
 } from '../../shared/taskPresentation';
-import {formatTimestampForHumans} from '../../shared/timeHelpers';
+import {formatDateTime} from '../../shared/timeHelpers';
 
 interface TaskRowProps {
-  taskRecord: TaskRecord;
-  hasPendingConflict: boolean;
+  task: Task;
+  hasConflict: boolean;
   onSelectTask: (taskId: string) => void;
 }
 
 function TaskRowComponent({
-  taskRecord,
-  hasPendingConflict,
+  task,
+  hasConflict,
   onSelectTask,
 }: TaskRowProps): React.JSX.Element {
-  const syncStatusLabel = getTaskSyncStatusLabel(taskRecord.syncStatus);
-  const syncBadgeBackground = getSyncStatusBadgeBackgroundColor(taskRecord.syncStatus);
-  const syncBadgeText = getSyncStatusBadgeTextColor(taskRecord.syncStatus);
+  const badgeLabel = syncStatusLabel(task.syncStatus);
+  const badgeBackground = syncBadgeBg(task.syncStatus);
+  const badgeTextColor = syncBadgeText(task.syncStatus);
 
   return (
     <Pressable
       style={({pressed}) => [styles.card, pressed ? styles.pressedBlackBackground : null]}
-      onPress={() => onSelectTask(taskRecord.id)}>
+      onPress={() => onSelectTask(task.id)}>
       <View style={styles.headerRow}>
-        <Text style={styles.taskTitle}>{taskRecord.title}</Text>
-        <View style={[styles.syncBadge, {backgroundColor: syncBadgeBackground}]}>
-          <Text style={[styles.syncBadgeText, {color: syncBadgeText}]}>{syncStatusLabel}</Text>
+        <Text style={styles.taskTitle}>{task.title}</Text>
+        <View style={[styles.syncBadge, {backgroundColor: badgeBackground}]}>
+          <Text style={[styles.syncBadgeText, {color: badgeTextColor}]}>{badgeLabel}</Text>
         </View>
       </View>
 
-      <Text style={styles.secondaryText}>{taskRecord.location.address}</Text>
+      <Text style={styles.secondaryText}>{task.location.address}</Text>
 
       <View style={styles.infoRow}>
-        <Text style={styles.infoText}>Price: ${taskRecord.price.toFixed(2)}</Text>
-        <Text style={styles.infoText}>Status: {getTaskBusinessStatusLabel(taskRecord.businessStatus)}</Text>
+        <Text style={styles.infoText}>Price: ${task.price.toFixed(2)}</Text>
+        <Text style={styles.infoText}>Status: {taskStatusLabel(task.businessStatus)}</Text>
       </View>
 
       <View style={styles.infoRow}>
-        <Text style={styles.infoText}>Updated: {formatTimestampForHumans(taskRecord.updatedAt)}</Text>
-        {hasPendingConflict ? <Text style={styles.conflictText}>Conflict pending</Text> : null}
+        <Text style={styles.infoText}>Updated: {formatDateTime(task.updatedAt)}</Text>
+        {hasConflict ? <Text style={styles.conflictText}>Conflict pending</Text> : null}
       </View>
     </Pressable>
   );

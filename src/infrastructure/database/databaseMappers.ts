@@ -1,99 +1,99 @@
 import {
-  ConflictRecord,
-  SyncQueueRecord,
-  TaskRecord,
+  Conflict,
+  QueueItem,
+  Task,
 } from '../../domain/taskModels';
 
-export function mapDatabaseRowToTaskRecord(databaseRow: any): TaskRecord {
+export function mapDatabaseRowToTask(row: any): Task {
   return {
-    id: String(databaseRow.id),
-    title: String(databaseRow.title),
-    price: Number(databaseRow.price),
-    businessStatus: databaseRow.business_status,
-    syncStatus: databaseRow.sync_status,
+    id: String(row.id),
+    title: String(row.title),
+    price: Number(row.price),
+    businessStatus: row.business_status,
+    syncStatus: row.sync_status,
     location: {
-      latitude: Number(databaseRow.location_lat),
-      longitude: Number(databaseRow.location_lng),
-      address: String(databaseRow.location_address),
+      latitude: Number(row.location_lat),
+      longitude: Number(row.location_lng),
+      address: String(row.location_address),
     },
-    imageUri: databaseRow.image_uri ?? null,
-    expiresAt: String(databaseRow.expires_at),
-    notes: databaseRow.notes ? String(databaseRow.notes) : '',
-    serverVersion: Number(databaseRow.server_version ?? 0),
-    updatedAt: String(databaseRow.updated_at),
-    lastSyncedAt: databaseRow.last_synced_at ? String(databaseRow.last_synced_at) : null,
+    imageUri: row.image_uri ?? null,
+    expiresAt: String(row.expires_at),
+    notes: row.notes ? String(row.notes) : '',
+    serverVersion: Number(row.server_version ?? 0),
+    updatedAt: String(row.updated_at),
+    lastSyncedAt: row.last_synced_at ? String(row.last_synced_at) : null,
   };
 }
 
-export function mapTaskRecordToDatabaseParameters(taskRecord: TaskRecord): unknown[] {
+export function mapTaskToDatabaseParameters(task: Task): unknown[] {
   return [
-    taskRecord.id,
-    taskRecord.title,
-    taskRecord.price,
-    taskRecord.businessStatus,
-    taskRecord.syncStatus,
-    taskRecord.location.latitude,
-    taskRecord.location.longitude,
-    taskRecord.location.address,
-    taskRecord.imageUri,
-    taskRecord.expiresAt,
-    taskRecord.notes,
-    taskRecord.serverVersion,
-    taskRecord.updatedAt,
-    taskRecord.lastSyncedAt,
+    task.id,
+    task.title,
+    task.price,
+    task.businessStatus,
+    task.syncStatus,
+    task.location.latitude,
+    task.location.longitude,
+    task.location.address,
+    task.imageUri,
+    task.expiresAt,
+    task.notes,
+    task.serverVersion,
+    task.updatedAt,
+    task.lastSyncedAt,
   ];
 }
 
-export function mapDatabaseRowToSyncQueueRecord(databaseRow: any): SyncQueueRecord {
+export function mapDatabaseRowToQueueItem(row: any): QueueItem {
   return {
-    id: String(databaseRow.id),
-    taskId: String(databaseRow.task_id),
-    actionType: databaseRow.action_type,
-    payloadJson: String(databaseRow.payload_json),
-    state: databaseRow.state,
-    attemptCount: Number(databaseRow.attempt_count),
-    nextRetryAt: String(databaseRow.next_retry_at),
-    lastError: databaseRow.last_error ? String(databaseRow.last_error) : null,
-    createdAt: String(databaseRow.created_at),
-    updatedAt: String(databaseRow.updated_at),
+    id: String(row.id),
+    taskId: String(row.task_id),
+    actionType: row.action_type,
+    payloadJson: String(row.payload_json),
+    state: row.state,
+    attemptCount: Number(row.attempt_count),
+    nextRetryAt: String(row.next_retry_at),
+    lastError: row.last_error ? String(row.last_error) : null,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
   };
 }
 
-export function mapSyncQueueRecordToDatabaseParameters(syncQueueRecord: SyncQueueRecord): unknown[] {
+export function mapQueueItemToDatabaseParameters(item: QueueItem): unknown[] {
   return [
-    syncQueueRecord.id,
-    syncQueueRecord.taskId,
-    syncQueueRecord.actionType,
-    syncQueueRecord.payloadJson,
-    syncQueueRecord.state,
-    syncQueueRecord.attemptCount,
-    syncQueueRecord.nextRetryAt,
-    syncQueueRecord.lastError,
-    syncQueueRecord.createdAt,
-    syncQueueRecord.updatedAt,
+    item.id,
+    item.taskId,
+    item.actionType,
+    item.payloadJson,
+    item.state,
+    item.attemptCount,
+    item.nextRetryAt,
+    item.lastError,
+    item.createdAt,
+    item.updatedAt,
   ];
 }
 
-export function mapDatabaseRowToConflictRecord(databaseRow: any): ConflictRecord {
+export function mapDatabaseRowToConflict(row: any): Conflict {
   return {
-    id: String(databaseRow.id),
-    taskId: String(databaseRow.task_id),
-    serverPayloadJson: String(databaseRow.server_payload_json),
-    localPayloadJson: String(databaseRow.local_payload_json),
-    resolution: databaseRow.resolution,
-    createdAt: String(databaseRow.created_at),
-    resolvedAt: databaseRow.resolved_at ? String(databaseRow.resolved_at) : null,
+    id: String(row.id),
+    taskId: String(row.task_id),
+    serverPayloadJson: String(row.server_payload_json),
+    localPayloadJson: String(row.local_payload_json),
+    resolution: row.resolution,
+    createdAt: String(row.created_at),
+    resolvedAt: row.resolved_at ? String(row.resolved_at) : null,
   };
 }
 
-export function mapConflictRecordToDatabaseParameters(conflictRecord: ConflictRecord): unknown[] {
+export function mapConflictToDatabaseParameters(conflict: Conflict): unknown[] {
   return [
-    conflictRecord.id,
-    conflictRecord.taskId,
-    conflictRecord.serverPayloadJson,
-    conflictRecord.localPayloadJson,
-    conflictRecord.resolution,
-    conflictRecord.createdAt,
-    conflictRecord.resolvedAt,
+    conflict.id,
+    conflict.taskId,
+    conflict.serverPayloadJson,
+    conflict.localPayloadJson,
+    conflict.resolution,
+    conflict.createdAt,
+    conflict.resolvedAt,
   ];
 }

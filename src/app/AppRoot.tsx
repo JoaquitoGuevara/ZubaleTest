@@ -20,49 +20,46 @@ import {
   setSelectedTaskId,
 } from '../state/taskBoardSlice';
 import {
-  selectAllConflicts,
-  selectAllTasks,
-  selectConflictLength,
-  selectQueueLength,
+  selectBoard,
+  selectConflictCount,
+  selectConflicts,
+  selectQueueCount,
   selectSelectedTask,
-  selectTaskBoardState,
+  selectTasks,
 } from '../state/taskBoardSelectors';
 
 export function AppRoot(): React.JSX.Element {
   const dispatch = useAppDispatch();
-  const taskBoardState = useAppSelector(selectTaskBoardState);
-  const allTasks = useAppSelector(selectAllTasks);
-  const allConflicts = useAppSelector(selectAllConflicts);
+  const board = useAppSelector(selectBoard);
+  const tasks = useAppSelector(selectTasks);
+  const conflicts = useAppSelector(selectConflicts);
   const selectedTask = useAppSelector(selectSelectedTask);
-  const queueLength = useAppSelector(selectQueueLength);
-  const conflictLength = useAppSelector(selectConflictLength);
+  const queueCount = useAppSelector(selectQueueCount);
+  const conflictCount = useAppSelector(selectConflictCount);
 
-  const previousNetworkConnectedRef = useRef<boolean | null>(null);
-  const previousFakeServerAvailableRef = useRef<boolean | null>(null);
+  const lastOnline = useRef<boolean | null>(null);
+  const lastServerOn = useRef<boolean | null>(null);
 
   useEffect(() => {
     dispatch(initializeApplication());
   }, [dispatch]);
 
   useEffect(() => {
-    if (taskBoardState.initializationCompleted) {
-      dispatch(runSyncNow('application-startup'));
+    if (board.initializationCompleted) {
+      dispatch(runSyncNow());
     }
-  }, [dispatch, taskBoardState.initializationCompleted]);
+  }, [dispatch, board.initializationCompleted]);
 
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener(networkState => {
-      const connected = Boolean(
-        networkState.isConnected && networkState.isInternetReachable !== false,
-      );
+    const unsubscribe = NetInfo.addEventListener(state => {
+      const online = Boolean(state.isConnected && state.isInternetReachable !== false);
+      const wasOnline = lastOnline.current;
+      lastOnline.current = online;
 
-      const previousConnected = previousNetworkConnectedRef.current;
-      previousNetworkConnectedRef.current = connected;
+      dispatch(setNetworkConnected(online));
 
-      dispatch(setNetworkConnected(connected));
-
-      if (previousConnected === false && connected) {
-        dispatch(runSyncNow('network-reconnected', {ignoreRetryWindow: true}));
+      if (wasOnline === false && online) {
+        dispatch(runSyncNow({ignoreRetryWindow: true}));
       }
     });
 
@@ -70,30 +67,23 @@ export function AppRoot(): React.JSX.Element {
   }, [dispatch]);
 
   useEffect(() => {
-    const previousFakeServerAvailable = previousFakeServerAvailableRef.current;
-    previousFakeServerAvailableRef.current = taskBoardState.fakeServerAvailable;
+    const wasServerOn = lastServerOn.current;
+    lastServerOn.current = board.fakeServerAvailable;
 
     if (
-      previousFakeServerAvailable === false &&
-      taskBoardState.fakeServerAvailable &&
-      taskBoardState.networkConnected &&
-      queueLength > 0
+      wasServerOn === false &&
+      board.fakeServerAvailable &&
+      board.networkConnected &&
+      queueCount > 0
     ) {
-      dispatch(runSyncNow('fake-server-restored', {ignoreRetryWindow: true}));
+      dispatch(runSyncNow({ignoreRetryWindow: true}));
     }
-  }, [
-    dispatch,
-    taskBoardState.fakeServerAvailable,
-    taskBoardState.networkConnected,
-    queueLength,
-  ]);
+  }, [dispatch, board.fakeServerAvailable, board.networkConnected, queueCount]);
 
   useEffect(() => {
-    const registrationPromise = registerBackgroundSync(async () => {
-      await dispatch(runSyncNow('background-fetch'));
-    });
-
-    registrationPromise.catch(() => undefined);
+    registerBackgroundSync(async () => {
+      await dispatch(runSyncNow());
+    }).catch(() => undefined);
 
     return () => {
       unregisterBackgroundSync().catch(() => undefined);
@@ -105,26 +95,20 @@ export function AppRoot(): React.JSX.Element {
       return;
     }
 
-    const backPressSubscription = BackHandler.addEventListener(
-      'hardwareBackPress',
-      () => {
-        dispatch(setSelectedTaskId(null));
-        return true;
-      },
-    );
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      dispatch(setSelectedTaskId(null));
+      return true;
+    });
 
-    return () => {
-      backPressSubscription.remove();
-    };
+    return () => sub.remove();
   }, [dispatch, selectedTask]);
 
-  const conflictTaskIdSet = useMemo(() => {
-    return new Set(allConflicts.map(conflictRecord => conflictRecord.taskId));
-  }, [allConflicts]);
+  const conflictTaskIds = useMemo(
+    () => new Set(conflicts.map(conflict => conflict.taskId)),
+    [conflicts],
+  );
 
-  const loadingIndicatorVisible = taskBoardState.loading && allTasks.length === 0;
-
-  if (loadingIndicatorVisible) {
+  if (board.loading && tasks.length === 0) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" backgroundColor="#F6F8FC" />
@@ -141,42 +125,39 @@ export function AppRoot(): React.JSX.Element {
 
       {selectedTask ? (
         <TaskDetailsScreen
-          taskRecord={selectedTask}
-          hasPendingConflict={conflictTaskIdSet.has(selectedTask.id)}
-          onGoBack={() => dispatch(setSelectedTaskId(null))}
-          onSaveTaskChanges={async (taskId, localTaskUpdateInput) => {
-            await dispatch(saveTaskChangesAndQueueSync(taskId, localTaskUpdateInput));
+          task={selectedTask}
+          hasConflict={conflictTaskIds.has(selectedTask.id)}
+          onBack={() => dispatch(setSelectedTaskId(null))}
+          onSave={async (taskId, patch) => {
+            await dispatch(saveTaskChangesAndQueueSync(taskId, patch));
           }}
-          onAcceptServerConflict={async taskId => {
+          onAcceptConflict={async taskId => {
             await dispatch(resolveConflictByAcceptingServer(taskId));
           }}
-          onRetryLocalConflict={async taskId => {
+          onRetryConflict={async taskId => {
             await dispatch(resolveConflictByRetryingLocal(taskId));
           }}
         />
       ) : (
-        <TaskListScreen
-          tasks={allTasks}
-          onSelectTask={taskId => dispatch(setSelectedTaskId(taskId))}
-        />
+        <TaskListScreen tasks={tasks} onSelectTask={id => dispatch(setSelectedTaskId(id))} />
       )}
 
       <DebugPanel
-        networkConnected={taskBoardState.networkConnected}
-        fakeServerAvailable={taskBoardState.fakeServerAvailable}
-        forceConflictForNextSyncRequest={taskBoardState.forceConflictForNextSyncRequest}
-        queueLength={queueLength}
-        conflictLength={conflictLength}
+        networkConnected={board.networkConnected}
+        fakeServerAvailable={board.fakeServerAvailable}
+        forceConflictForNextSyncRequest={board.forceConflictForNextSyncRequest}
+        queueLength={queueCount}
+        conflictLength={conflictCount}
         onToggleFakeServerAvailability={value => dispatch(setFakeServerAvailable(value))}
         onToggleForceConflictForNextSync={value =>
           dispatch(setForceConflictForNextSyncRequest(value))
         }
-        onRunSyncNow={() => dispatch(runSyncNow('debug-panel'))}
+        onRunSyncNow={() => dispatch(runSyncNow())}
       />
 
-      {taskBoardState.errorMessage ? (
+      {board.errorMessage ? (
         <View style={styles.errorBanner}>
-          <Text style={styles.errorBannerText}>{taskBoardState.errorMessage}</Text>
+          <Text style={styles.errorBannerText}>{board.errorMessage}</Text>
         </View>
       ) : null}
     </SafeAreaView>

@@ -1,25 +1,15 @@
 import type {ResultSet} from 'react-native-sqlite-storage';
-import {
-  ConflictRecord,
-  LocalDatabaseSnapshot,
-  LocalTaskUpdateInput,
-  SyncQueueRecord,
-  TaskRecord,
-} from '../../domain/taskModels';
-import {createUniqueIdentifier} from '../../shared/idHelpers';
-import {
-  addSecondsToIsoTimestamp,
-  calculateRetryDelayInSeconds,
-  getCurrentIsoTimestamp,
-} from '../../shared/timeHelpers';
+import {Conflict, QueueItem, Snapshot, Task, TaskPatch} from '../../domain/taskModels';
+import {makeId} from '../../shared/idHelpers';
+import {addSeconds, nowIso, retryDelaySeconds} from '../../shared/timeHelpers';
 import {executeSqlQuery, executeTransaction} from './databaseConnection';
 import {
-  mapConflictRecordToDatabaseParameters,
-  mapDatabaseRowToConflictRecord,
-  mapDatabaseRowToSyncQueueRecord,
-  mapDatabaseRowToTaskRecord,
-  mapSyncQueueRecordToDatabaseParameters,
-  mapTaskRecordToDatabaseParameters,
+  mapConflictToDatabaseParameters,
+  mapDatabaseRowToConflict,
+  mapDatabaseRowToQueueItem,
+  mapDatabaseRowToTask,
+  mapQueueItemToDatabaseParameters,
+  mapTaskToDatabaseParameters,
 } from './databaseMappers';
 import {initializeDatabaseSchemaAndSeedDataIfNeeded} from './databaseSchema';
 
@@ -69,24 +59,21 @@ INSERT OR REPLACE INTO conflicts (
 ) VALUES (?, ?, ?, ?, ?, ?, ?)
 `;
 
-function mapResultSetToArray<T>(
-  resultSet: ResultSet,
-  rowMapper: (row: any) => T,
-): T[] {
-  const mappedRows: T[] = [];
+function rowsToArray<T>(result: ResultSet, mapRow: (row: any) => T): T[] {
+  const items: T[] = [];
 
-  for (let index = 0; index < resultSet.rows.length; index += 1) {
-    mappedRows.push(rowMapper(resultSet.rows.item(index)));
+  for (let index = 0; index < result.rows.length; index += 1) {
+    items.push(mapRow(result.rows.item(index)));
   }
 
-  return mappedRows;
+  return items;
 }
 
 export async function initializeLocalDatabase(): Promise<void> {
   await initializeDatabaseSchemaAndSeedDataIfNeeded();
 }
 
-export async function readLocalDatabaseSnapshot(): Promise<LocalDatabaseSnapshot> {
+export async function readSnapshot(): Promise<Snapshot> {
   const tasksResult = await executeSqlQuery('SELECT * FROM tasks ORDER BY updated_at DESC');
   const queueResult = await executeSqlQuery('SELECT * FROM sync_queue ORDER BY created_at ASC');
   const conflictsResult = await executeSqlQuery(
@@ -94,51 +81,51 @@ export async function readLocalDatabaseSnapshot(): Promise<LocalDatabaseSnapshot
   );
 
   return {
-    tasks: mapResultSetToArray(tasksResult, mapDatabaseRowToTaskRecord),
-    queueItems: mapResultSetToArray(queueResult, mapDatabaseRowToSyncQueueRecord),
-    conflicts: mapResultSetToArray(conflictsResult, mapDatabaseRowToConflictRecord),
+    tasks: rowsToArray(tasksResult, mapDatabaseRowToTask),
+    queueItems: rowsToArray(queueResult, mapDatabaseRowToQueueItem),
+    conflicts: rowsToArray(conflictsResult, mapDatabaseRowToConflict),
   };
 }
 
-export async function readTaskById(taskId: string): Promise<TaskRecord | null> {
+async function readTask(taskId: string): Promise<Task | null> {
   const taskResult = await executeSqlQuery('SELECT * FROM tasks WHERE id = ? LIMIT 1', [taskId]);
 
   if (taskResult.rows.length === 0) {
     return null;
   }
 
-  return mapDatabaseRowToTaskRecord(taskResult.rows.item(0));
+  return mapDatabaseRowToTask(taskResult.rows.item(0));
 }
 
 export async function saveTaskUpdateAndQueueSync(
   taskId: string,
-  localTaskUpdateInput: LocalTaskUpdateInput,
+  patch: TaskPatch,
 ): Promise<void> {
-  const existingTask = await readTaskById(taskId);
+  const existingTask = await readTask(taskId);
 
   if (!existingTask) {
     throw new Error(`Task not found for id: ${taskId}`);
   }
 
-  const now = getCurrentIsoTimestamp();
+  const now = nowIso();
 
-  const updatedTaskRecord: TaskRecord = {
+  const updatedTask: Task = {
     ...existingTask,
-    businessStatus: localTaskUpdateInput.businessStatus ?? existingTask.businessStatus,
-    notes: localTaskUpdateInput.notes ?? existingTask.notes,
+    businessStatus: patch.businessStatus ?? existingTask.businessStatus,
+    notes: patch.notes ?? existingTask.notes,
     imageUri:
-      localTaskUpdateInput.imageUri !== undefined
-        ? localTaskUpdateInput.imageUri
+      patch.imageUri !== undefined
+        ? patch.imageUri
         : existingTask.imageUri,
     syncStatus: 'pending_sync',
     updatedAt: now,
   };
 
-  const queueRecord: SyncQueueRecord = {
-    id: createUniqueIdentifier('queue'),
-    taskId: updatedTaskRecord.id,
+  const queueItem: QueueItem = {
+    id: makeId('queue'),
+    taskId: updatedTask.id,
     actionType: 'UPSERT_TASK',
-    payloadJson: JSON.stringify(updatedTaskRecord),
+    payloadJson: JSON.stringify(updatedTask),
     state: 'queued',
     attemptCount: 0,
     nextRetryAt: now,
@@ -148,21 +135,21 @@ export async function saveTaskUpdateAndQueueSync(
   };
 
   await executeTransaction(async () => {
-    await executeSqlQuery(UPSERT_TASK_SQL, mapTaskRecordToDatabaseParameters(updatedTaskRecord));
+    await executeSqlQuery(UPSERT_TASK_SQL, mapTaskToDatabaseParameters(updatedTask));
     await executeSqlQuery('DELETE FROM sync_queue WHERE task_id = ?', [taskId]);
     await executeSqlQuery(
       INSERT_SYNC_QUEUE_ITEM_SQL,
-      mapSyncQueueRecordToDatabaseParameters(queueRecord),
+      mapQueueItemToDatabaseParameters(queueItem),
     );
     await executeSqlQuery('DELETE FROM conflicts WHERE task_id = ?', [taskId]);
   });
 }
 
 export async function readQueueItemsReadyForProcessing(
-  readyAtIsoTimestamp: string,
+  now: string,
   ignoreRetryWindow = false,
-): Promise<SyncQueueRecord[]> {
-  const readyQueueItemsQuery = ignoreRetryWindow
+): Promise<QueueItem[]> {
+  const sql = ignoreRetryWindow
     ? `SELECT * FROM sync_queue
        WHERE (state = 'queued' OR state = 'failed')
        ORDER BY created_at ASC
@@ -173,31 +160,28 @@ export async function readQueueItemsReadyForProcessing(
        ORDER BY created_at ASC
        LIMIT 50`;
 
-  const readyQueueItemsParameters = ignoreRetryWindow ? [] : [readyAtIsoTimestamp];
+  const params = ignoreRetryWindow ? [] : [now];
 
-  const readyQueueItems = await executeSqlQuery(
-    readyQueueItemsQuery,
-    readyQueueItemsParameters,
-  );
+  const result = await executeSqlQuery(sql, params);
 
-  return mapResultSetToArray(readyQueueItems, mapDatabaseRowToSyncQueueRecord);
+  return rowsToArray(result, mapDatabaseRowToQueueItem);
 }
 
 export async function markQueueItemAsProcessing(queueItemId: string): Promise<void> {
   await executeSqlQuery(
     "UPDATE sync_queue SET state = 'processing', updated_at = ? WHERE id = ?",
-    [getCurrentIsoTimestamp(), queueItemId],
+    [nowIso(), queueItemId],
   );
 }
 
 export async function markQueueItemForRetry(
   queueItemId: string,
-  newAttemptCount: number,
-  errorMessage: string,
+  attemptCount: number,
+  error: string,
 ): Promise<void> {
-  const now = getCurrentIsoTimestamp();
-  const delaySeconds = calculateRetryDelayInSeconds(newAttemptCount);
-  const nextRetryAt = addSecondsToIsoTimestamp(now, delaySeconds);
+  const now = nowIso();
+  const delaySeconds = retryDelaySeconds(attemptCount);
+  const nextRetryAt = addSeconds(now, delaySeconds);
 
   await executeSqlQuery(
     `UPDATE sync_queue
@@ -207,7 +191,7 @@ export async function markQueueItemForRetry(
          last_error = ?,
          updated_at = ?
      WHERE id = ?`,
-    [newAttemptCount, nextRetryAt, errorMessage, now, queueItemId],
+    [attemptCount, nextRetryAt, error, now, queueItemId],
   );
 }
 
@@ -218,14 +202,14 @@ export async function removeQueueItem(queueItemId: string): Promise<void> {
 export async function markTaskAsSyncing(taskId: string): Promise<void> {
   await executeSqlQuery(
     "UPDATE tasks SET sync_status = 'syncing', updated_at = ? WHERE id = ?",
-    [getCurrentIsoTimestamp(), taskId],
+    [nowIso(), taskId],
   );
 }
 
 export async function markTaskAsSynced(
   taskId: string,
-  newServerVersion: number,
-  syncedAtIsoTimestamp: string,
+  serverVersion: number,
+  syncedAt: string,
 ): Promise<void> {
   await executeSqlQuery(
     `UPDATE tasks
@@ -234,49 +218,49 @@ export async function markTaskAsSynced(
          last_synced_at = ?,
          updated_at = ?
      WHERE id = ?`,
-    [newServerVersion, syncedAtIsoTimestamp, syncedAtIsoTimestamp, taskId],
+    [serverVersion, syncedAt, syncedAt, taskId],
   );
 }
 
 export async function markTaskAsSyncError(taskId: string): Promise<void> {
   await executeSqlQuery(
     "UPDATE tasks SET sync_status = 'error', updated_at = ? WHERE id = ?",
-    [getCurrentIsoTimestamp(), taskId],
+    [nowIso(), taskId],
   );
 }
 
 export async function saveConflictForTask(
   taskId: string,
-  serverTaskRecord: TaskRecord,
-  localTaskPayloadJson: string,
+  serverTask: Task,
+  localPayload: string,
 ): Promise<void> {
-  const now = getCurrentIsoTimestamp();
+  const now = nowIso();
 
-  const taskWithConflictStatus: TaskRecord = {
-    ...serverTaskRecord,
+  const conflictedTask: Task = {
+    ...serverTask,
     syncStatus: 'conflict',
     updatedAt: now,
   };
 
-  const conflictRecord: ConflictRecord = {
-    id: createUniqueIdentifier('conflict'),
+  const conflict: Conflict = {
+    id: makeId('conflict'),
     taskId,
-    serverPayloadJson: JSON.stringify(serverTaskRecord),
-    localPayloadJson: localTaskPayloadJson,
+    serverPayloadJson: JSON.stringify(serverTask),
+    localPayloadJson: localPayload,
     resolution: 'pending',
     createdAt: now,
     resolvedAt: null,
   };
 
   await executeTransaction(async () => {
-    await executeSqlQuery(UPSERT_TASK_SQL, mapTaskRecordToDatabaseParameters(taskWithConflictStatus));
+    await executeSqlQuery(UPSERT_TASK_SQL, mapTaskToDatabaseParameters(conflictedTask));
     await executeSqlQuery('DELETE FROM conflicts WHERE task_id = ?', [taskId]);
-    await executeSqlQuery(INSERT_CONFLICT_SQL, mapConflictRecordToDatabaseParameters(conflictRecord));
+    await executeSqlQuery(INSERT_CONFLICT_SQL, mapConflictToDatabaseParameters(conflict));
   });
 }
 
 export async function acceptServerConflictResolution(taskId: string): Promise<void> {
-  const now = getCurrentIsoTimestamp();
+  const now = nowIso();
 
   await executeTransaction(async () => {
     await executeSqlQuery(
@@ -308,21 +292,21 @@ export async function retryLocalConflictResolution(taskId: string): Promise<void
     return;
   }
 
-  const conflictRecord = mapDatabaseRowToConflictRecord(conflictResult.rows.item(0));
-  const localTaskRecord = JSON.parse(conflictRecord.localPayloadJson) as TaskRecord;
-  const now = getCurrentIsoTimestamp();
+  const conflict = mapDatabaseRowToConflict(conflictResult.rows.item(0));
+  const localTask = JSON.parse(conflict.localPayloadJson) as Task;
+  const now = nowIso();
 
-  const retriedTaskRecord: TaskRecord = {
-    ...localTaskRecord,
+  const retriedTask: Task = {
+    ...localTask,
     syncStatus: 'pending_sync',
     updatedAt: now,
   };
 
-  const newQueueRecord: SyncQueueRecord = {
-    id: createUniqueIdentifier('queue'),
+  const queueItem: QueueItem = {
+    id: makeId('queue'),
     taskId,
     actionType: 'UPSERT_TASK',
-    payloadJson: JSON.stringify(retriedTaskRecord),
+    payloadJson: JSON.stringify(retriedTask),
     state: 'queued',
     attemptCount: 0,
     nextRetryAt: now,
@@ -332,11 +316,11 @@ export async function retryLocalConflictResolution(taskId: string): Promise<void
   };
 
   await executeTransaction(async () => {
-    await executeSqlQuery(UPSERT_TASK_SQL, mapTaskRecordToDatabaseParameters(retriedTaskRecord));
+    await executeSqlQuery(UPSERT_TASK_SQL, mapTaskToDatabaseParameters(retriedTask));
     await executeSqlQuery('DELETE FROM sync_queue WHERE task_id = ?', [taskId]);
     await executeSqlQuery(
       INSERT_SYNC_QUEUE_ITEM_SQL,
-      mapSyncQueueRecordToDatabaseParameters(newQueueRecord),
+      mapQueueItemToDatabaseParameters(queueItem),
     );
     await executeSqlQuery(
       `UPDATE conflicts

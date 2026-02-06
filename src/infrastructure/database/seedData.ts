@@ -1,5 +1,5 @@
-import {TaskRecord} from '../../domain/taskModels';
-import {getCurrentIsoTimestamp} from '../../shared/timeHelpers';
+import {Task} from '../../domain/taskModels';
+import {nowIso} from '../../shared/timeHelpers';
 
 const taskTitleOptions = [
   'Audit Coca-Cola Shelf',
@@ -29,8 +29,8 @@ function createExpiresAtIso(daysAhead: number): string {
   return expiryDate.toISOString();
 }
 
-export function createInitialTaskRecords(): TaskRecord[] {
-  const initialTasks: TaskRecord[] = [];
+export function createInitialTasks(): Task[] {
+  const initialTasks: Task[] = [];
   const baseLatitude = 19.4326;
   const baseLongitude = -99.1332;
 
@@ -56,8 +56,8 @@ export function createInitialTaskRecords(): TaskRecord[] {
       expiresAt: createExpiresAtIso(15 + (index % 10)),
       notes: '',
       serverVersion: 1,
-      updatedAt: getCurrentIsoTimestamp(),
-      lastSyncedAt: getCurrentIsoTimestamp(),
+      updatedAt: nowIso(),
+      lastSyncedAt: nowIso(),
     });
   }
 

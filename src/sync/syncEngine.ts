@@ -1,5 +1,4 @@
-import {SyncCycleReport, TaskRecord} from '../domain/taskModels';
-import {applyTaskUpsertToFakeServer} from '../infrastructure/fakeServer/fakeServerGateway';
+import {Task} from '../domain/taskModels';
 import {
   markQueueItemAsProcessing,
   markQueueItemForRetry,
@@ -10,111 +9,72 @@ import {
   removeQueueItem,
   saveConflictForTask,
 } from '../infrastructure/database/taskRepository';
-import {getCurrentIsoTimestamp} from '../shared/timeHelpers';
+import {upsertTaskOnFakeServer} from '../infrastructure/fakeServer/fakeServerGateway';
+import {nowIso} from '../shared/timeHelpers';
 
-let syncCycleAlreadyRunning = false;
+let running = false;
 
-interface RunTaskSyncCycleInput {
-  reason: string;
-  deviceIsOnline: boolean;
+interface SyncInput {
+  online: boolean;
   ignoreRetryWindow?: boolean;
 }
 
-function createInitialSyncCycleReport(reason: string): SyncCycleReport {
-  return {
-    reason,
-    queuedItemsChecked: 0,
-    syncedItemsCount: 0,
-    conflictItemsCount: 0,
-    failedItemsCount: 0,
-    skippedBecauseOffline: false,
-    skippedBecauseSyncAlreadyRunning: false,
-  };
-}
-
-function safelyParseTaskRecord(payloadJson: string): TaskRecord | null {
+function parseTask(json: string): Task | null {
   try {
-    return JSON.parse(payloadJson) as TaskRecord;
+    return JSON.parse(json) as Task;
   } catch {
     return null;
   }
 }
 
-export async function runTaskSyncCycle(input: RunTaskSyncCycleInput): Promise<SyncCycleReport> {
-  const syncCycleReport = createInitialSyncCycleReport(input.reason);
-
-  if (syncCycleAlreadyRunning) {
-    syncCycleReport.skippedBecauseSyncAlreadyRunning = true;
-    return syncCycleReport;
+export async function syncQueue(input: SyncInput): Promise<void> {
+  if (running || !input.online) {
+    return;
   }
 
-  if (!input.deviceIsOnline) {
-    syncCycleReport.skippedBecauseOffline = true;
-    return syncCycleReport;
-  }
-
-  syncCycleAlreadyRunning = true;
+  running = true;
 
   try {
-    const readyQueueItems = await readQueueItemsReadyForProcessing(
-      getCurrentIsoTimestamp(),
+    const items = await readQueueItemsReadyForProcessing(
+      nowIso(),
       Boolean(input.ignoreRetryWindow),
     );
-    syncCycleReport.queuedItemsChecked = readyQueueItems.length;
 
-    for (const queueItem of readyQueueItems) {
-      await markQueueItemAsProcessing(queueItem.id);
-      await markTaskAsSyncing(queueItem.taskId);
+    for (const item of items) {
+      await markQueueItemAsProcessing(item.id);
+      await markTaskAsSyncing(item.taskId);
 
-      const localTaskRecord = safelyParseTaskRecord(queueItem.payloadJson);
+      const task = parseTask(item.payloadJson);
 
-      if (!localTaskRecord) {
-        await markQueueItemForRetry(
-          queueItem.id,
-          queueItem.attemptCount + 1,
-          'Queue payload could not be parsed as task record.',
-        );
-        await markTaskAsSyncError(queueItem.taskId);
-        syncCycleReport.failedItemsCount += 1;
+      if (!task) {
+        await markQueueItemForRetry(item.id, item.attemptCount + 1, 'Invalid queue payload');
+        await markTaskAsSyncError(item.taskId);
         continue;
       }
 
-      const fakeServerResult = await applyTaskUpsertToFakeServer(localTaskRecord, input.deviceIsOnline);
+      const result = await upsertTaskOnFakeServer(task, input.online);
 
-      if (fakeServerResult.resultType === 'success') {
+      if (result.resultType === 'success') {
         await markTaskAsSynced(
-          queueItem.taskId,
-          fakeServerResult.serverTaskRecord.serverVersion,
-          fakeServerResult.serverTaskRecord.lastSyncedAt ?? getCurrentIsoTimestamp(),
+          item.taskId,
+          result.serverTask.serverVersion,
+          result.serverTask.lastSyncedAt ?? nowIso(),
         );
-        await removeQueueItem(queueItem.id);
-        syncCycleReport.syncedItemsCount += 1;
+        await removeQueueItem(item.id);
         continue;
       }
 
-      if (fakeServerResult.resultType === 'conflict') {
-        await saveConflictForTask(
-          queueItem.taskId,
-          fakeServerResult.serverTaskRecord,
-          queueItem.payloadJson,
-        );
-        await removeQueueItem(queueItem.id);
-        syncCycleReport.conflictItemsCount += 1;
+      if (result.resultType === 'conflict') {
+        await saveConflictForTask(item.taskId, result.serverTask, item.payloadJson);
+        await removeQueueItem(item.id);
         continue;
       }
 
-      await markQueueItemForRetry(
-        queueItem.id,
-        queueItem.attemptCount + 1,
-        fakeServerResult.reason,
-      );
-      await markTaskAsSyncError(queueItem.taskId);
-      syncCycleReport.failedItemsCount += 1;
+      await markQueueItemForRetry(item.id, item.attemptCount + 1, result.reason);
+      await markTaskAsSyncError(item.taskId);
       break;
     }
-
-    return syncCycleReport;
   } finally {
-    syncCycleAlreadyRunning = false;
+    running = false;
   }
 }

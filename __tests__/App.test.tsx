@@ -1,30 +1,28 @@
-import {createUniqueIdentifier} from '../src/shared/idHelpers';
+import {makeId} from '../src/shared/idHelpers';
 import {
-  calculateRetryDelayInSeconds,
-  formatTimestampForHumans,
+  retryDelaySeconds,
+  formatDateTime,
 } from '../src/shared/timeHelpers';
 import {
-  getFilterLabel,
-  getTaskBusinessStatusLabel,
-  getTaskSyncStatusLabel,
+  taskStatusLabel,
+  syncStatusLabel,
 } from '../src/shared/taskPresentation';
 
 test('retry delay increases and caps', () => {
-  expect(calculateRetryDelayInSeconds(0)).toBe(3);
-  expect(calculateRetryDelayInSeconds(1)).toBe(6);
-  expect(calculateRetryDelayInSeconds(2)).toBe(12);
-  expect(calculateRetryDelayInSeconds(20)).toBe(180);
+  expect(retryDelaySeconds(0)).toBe(3);
+  expect(retryDelaySeconds(1)).toBe(6);
+  expect(retryDelaySeconds(2)).toBe(12);
+  expect(retryDelaySeconds(20)).toBe(180);
 });
 
 test('labels are human readable', () => {
-  expect(getTaskBusinessStatusLabel('in_progress')).toBe('In Progress');
-  expect(getTaskSyncStatusLabel('pending_sync')).toBe('Pending Sync');
-  expect(getFilterLabel('conflict')).toBe('Conflicts');
+  expect(taskStatusLabel('in_progress')).toBe('In Progress');
+  expect(syncStatusLabel('pending_sync')).toBe('Pending Sync');
 });
 
 test('identifier helper returns unique values', () => {
-  const firstIdentifier = createUniqueIdentifier('task');
-  const secondIdentifier = createUniqueIdentifier('task');
+  const firstIdentifier = makeId('task');
+  const secondIdentifier = makeId('task');
 
   expect(firstIdentifier).not.toBe(secondIdentifier);
   expect(firstIdentifier.startsWith('task_')).toBe(true);
@@ -32,7 +30,7 @@ test('identifier helper returns unique values', () => {
 });
 
 test('timestamp formatter returns a readable string', () => {
-  const formattedTimestamp = formatTimestampForHumans('2026-02-06T12:30:00.000Z');
+  const formattedTimestamp = formatDateTime('2026-02-06T12:30:00.000Z');
 
   expect(formattedTimestamp).toMatch(/2026-02-06 \d{2}:\d{2}/);
 });

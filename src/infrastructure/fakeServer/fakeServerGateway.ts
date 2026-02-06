@@ -1,14 +1,14 @@
-import {TaskRecord} from '../../domain/taskModels';
-import {getCurrentIsoTimestamp} from '../../shared/timeHelpers';
+import {Task} from '../../domain/taskModels';
+import {nowIso} from '../../shared/timeHelpers';
 
 export type FakeServerSyncResult =
   | {
       resultType: 'success';
-      serverTaskRecord: TaskRecord;
+      serverTask: Task;
     }
   | {
       resultType: 'conflict';
-      serverTaskRecord: TaskRecord;
+      serverTask: Task;
       reason: string;
     }
   | {
@@ -16,94 +16,90 @@ export type FakeServerSyncResult =
       reason: string;
     };
 
-let fakeServerIsAvailable = true;
-let forceConflictForNextSyncRequest = false;
-const fakeServerTaskStore = new Map<string, TaskRecord>();
+let serverAvailable = true;
+let shouldForceConflictNextSync = false;
+const serverTasks = new Map<string, Task>();
 
-function cloneTaskRecord(taskRecord: TaskRecord): TaskRecord {
-  return JSON.parse(JSON.stringify(taskRecord)) as TaskRecord;
+function cloneTask(task: Task): Task {
+  return JSON.parse(JSON.stringify(task)) as Task;
 }
 
 export function setFakeServerAvailability(availability: boolean): void {
-  fakeServerIsAvailable = availability;
+  serverAvailable = availability;
 }
 
-export function setForceConflictForNextSyncRequest(shouldForceConflict: boolean): void {
-  forceConflictForNextSyncRequest = shouldForceConflict;
+export function setForceConflictNextSync(shouldForceConflict: boolean): void {
+  shouldForceConflictNextSync = shouldForceConflict;
 }
 
-export function getForceConflictForNextSyncRequestFlag(): boolean {
-  return forceConflictForNextSyncRequest;
+export function clearForceConflictNextSync(): void {
+  shouldForceConflictNextSync = false;
 }
 
-export function clearForceConflictForNextSyncRequestFlag(): void {
-  forceConflictForNextSyncRequest = false;
-}
-
-export async function applyTaskUpsertToFakeServer(
-  localTaskRecord: TaskRecord,
-  deviceIsOnline: boolean,
+export async function upsertTaskOnFakeServer(
+  localTask: Task,
+  online: boolean,
 ): Promise<FakeServerSyncResult> {
-  if (!deviceIsOnline) {
+  if (!online) {
     return {
       resultType: 'network_error',
       reason: 'Device is offline according to network monitor.',
     };
   }
 
-  if (!fakeServerIsAvailable) {
+  if (!serverAvailable) {
     return {
       resultType: 'network_error',
       reason: 'Fake server is set to unavailable by debug panel.',
     };
   }
 
-  const existingServerTaskRecord = fakeServerTaskStore.get(localTaskRecord.id);
-  const now = getCurrentIsoTimestamp();
+  const existingServerTask = serverTasks.get(localTask.id);
+  const now = nowIso();
 
-  if (forceConflictForNextSyncRequest) {
-    forceConflictForNextSyncRequest = false;
+  if (shouldForceConflictNextSync) {
+    shouldForceConflictNextSync = false;
 
-    const conflictServerTaskRecord: TaskRecord = {
-      ...(existingServerTaskRecord
-        ? cloneTaskRecord(existingServerTaskRecord)
-        : cloneTaskRecord(localTaskRecord)),
+    const conflictServerTask: Task = {
+      ...(existingServerTask
+        ? cloneTask(existingServerTask)
+        : cloneTask(localTask)),
       businessStatus: 'cancelled',
       syncStatus: 'synced',
-      serverVersion: (existingServerTaskRecord?.serverVersion ?? localTaskRecord.serverVersion) + 1,
+      serverVersion: (existingServerTask?.serverVersion ?? localTask.serverVersion) + 1,
       updatedAt: now,
       lastSyncedAt: now,
     };
 
-    fakeServerTaskStore.set(localTaskRecord.id, conflictServerTaskRecord);
+    serverTasks.set(localTask.id, conflictServerTask);
 
     return {
       resultType: 'conflict',
-      serverTaskRecord: conflictServerTaskRecord,
+      serverTask: conflictServerTask,
       reason: 'Forced conflict requested from debug panel.',
     };
   }
 
-  if (existingServerTaskRecord?.businessStatus === 'cancelled' && localTaskRecord.businessStatus === 'done') {
+  if (existingServerTask?.businessStatus === 'cancelled' && localTask.businessStatus === 'done') {
     return {
       resultType: 'conflict',
-      serverTaskRecord: cloneTaskRecord(existingServerTaskRecord),
+      serverTask: cloneTask(existingServerTask),
       reason: 'Server task is already cancelled while local task is marked done.',
     };
   }
 
-  const acceptedServerTaskRecord: TaskRecord = {
-    ...cloneTaskRecord(localTaskRecord),
+  const acceptedServerTask: Task = {
+    ...cloneTask(localTask),
     syncStatus: 'synced',
-    serverVersion: (existingServerTaskRecord?.serverVersion ?? localTaskRecord.serverVersion) + 1,
+    serverVersion: (existingServerTask?.serverVersion ?? localTask.serverVersion) + 1,
     updatedAt: now,
     lastSyncedAt: now,
   };
 
-  fakeServerTaskStore.set(localTaskRecord.id, acceptedServerTaskRecord);
+  serverTasks.set(localTask.id, acceptedServerTask);
 
   return {
     resultType: 'success',
-    serverTaskRecord: acceptedServerTaskRecord,
+    serverTask: acceptedServerTask,
   };
 }

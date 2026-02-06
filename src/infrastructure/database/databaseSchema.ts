@@ -1,6 +1,8 @@
 import {executeSqlQuery, executeTransaction} from './databaseConnection';
-import {createInitialTaskRecords} from './seedData';
-import {mapTaskRecordToDatabaseParameters} from './databaseMappers';
+import {createInitialTasks} from './seedData';
+import {mapTaskToDatabaseParameters} from './databaseMappers';
+
+const SEED_KEY = 'initial_seed_completed';
 
 const CREATE_TASKS_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS tasks (
@@ -78,7 +80,7 @@ export async function initializeDatabaseSchemaAndSeedDataIfNeeded(): Promise<voi
 
   const metadataResult = await executeSqlQuery(
     'SELECT value FROM app_metadata WHERE key = ? LIMIT 1',
-    ['initial_seed_completed'],
+    [SEED_KEY],
   );
 
   const alreadySeeded =
@@ -88,16 +90,16 @@ export async function initializeDatabaseSchemaAndSeedDataIfNeeded(): Promise<voi
     return;
   }
 
-  const seedTasks = createInitialTaskRecords();
+  const seedTasks = createInitialTasks();
 
   await executeTransaction(async () => {
     for (const seedTask of seedTasks) {
-      await executeSqlQuery(UPSERT_TASK_SQL, mapTaskRecordToDatabaseParameters(seedTask));
+      await executeSqlQuery(UPSERT_TASK_SQL, mapTaskToDatabaseParameters(seedTask));
     }
 
     await executeSqlQuery(
       'INSERT OR REPLACE INTO app_metadata (key, value) VALUES (?, ?)',
-      ['initial_seed_completed', 'true'],
+      [SEED_KEY, 'true'],
     );
   });
 }
