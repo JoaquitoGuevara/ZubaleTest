@@ -26,7 +26,12 @@ export function DebugPanel({
 
   return (
     <View style={styles.container}>
-      <Pressable style={styles.headerButton} onPress={() => setIsExpanded(previous => !previous)}>
+      <Pressable
+        style={({pressed}) => [
+          styles.headerButton,
+          pressed ? styles.pressedBlackBackground : null,
+        ]}
+        onPress={() => setIsExpanded(previous => !previous)}>
         <Text style={styles.headerLabel}>Debug Panel</Text>
         <Text style={styles.headerActionLabel}>{isExpanded ? 'Hide' : 'Show'}</Text>
       </Pressable>
@@ -53,7 +58,12 @@ export function DebugPanel({
             />
           </View>
 
-          <Pressable style={styles.syncNowButton} onPress={onRunSyncNow}>
+          <Pressable
+            style={({pressed}) => [
+              styles.syncNowButton,
+              pressed ? styles.pressedBlackBackground : null,
+            ]}
+            onPress={onRunSyncNow}>
             <Text style={styles.syncNowButtonLabel}>Run sync now</Text>
           </Pressable>
         </View>
@@ -115,5 +125,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
+  },
+  pressedBlackBackground: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
   },
 });

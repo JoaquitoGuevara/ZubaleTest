@@ -160,14 +160,24 @@ export async function saveTaskUpdateAndQueueSync(
 
 export async function readQueueItemsReadyForProcessing(
   readyAtIsoTimestamp: string,
+  ignoreRetryWindow = false,
 ): Promise<SyncQueueRecord[]> {
+  const readyQueueItemsQuery = ignoreRetryWindow
+    ? `SELECT * FROM sync_queue
+       WHERE (state = 'queued' OR state = 'failed')
+       ORDER BY created_at ASC
+       LIMIT 50`
+    : `SELECT * FROM sync_queue
+       WHERE (state = 'queued' OR state = 'failed')
+       AND next_retry_at <= ?
+       ORDER BY created_at ASC
+       LIMIT 50`;
+
+  const readyQueueItemsParameters = ignoreRetryWindow ? [] : [readyAtIsoTimestamp];
+
   const readyQueueItems = await executeSqlQuery(
-    `SELECT * FROM sync_queue
-     WHERE (state = 'queued' OR state = 'failed')
-     AND next_retry_at <= ?
-     ORDER BY created_at ASC
-     LIMIT 50`,
-    [readyAtIsoTimestamp],
+    readyQueueItemsQuery,
+    readyQueueItemsParameters,
   );
 
   return mapResultSetToArray(readyQueueItems, mapDatabaseRowToSyncQueueRecord);

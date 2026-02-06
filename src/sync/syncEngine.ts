@@ -17,6 +17,7 @@ let syncCycleAlreadyRunning = false;
 interface RunTaskSyncCycleInput {
   reason: string;
   deviceIsOnline: boolean;
+  ignoreRetryWindow?: boolean;
 }
 
 function createInitialSyncCycleReport(reason: string): SyncCycleReport {
@@ -55,7 +56,10 @@ export async function runTaskSyncCycle(input: RunTaskSyncCycleInput): Promise<Sy
   syncCycleAlreadyRunning = true;
 
   try {
-    const readyQueueItems = await readQueueItemsReadyForProcessing(getCurrentIsoTimestamp());
+    const readyQueueItems = await readQueueItemsReadyForProcessing(
+      getCurrentIsoTimestamp(),
+      Boolean(input.ignoreRetryWindow),
+    );
     syncCycleReport.queuedItemsChecked = readyQueueItems.length;
 
     for (const queueItem of readyQueueItems) {

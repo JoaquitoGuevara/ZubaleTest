@@ -38,6 +38,7 @@ export function AppRoot(): React.JSX.Element {
   const conflictLength = useAppSelector(selectConflictLength);
 
   const previousNetworkConnectedRef = useRef<boolean | null>(null);
+  const previousFakeServerAvailableRef = useRef<boolean | null>(null);
 
   useEffect(() => {
     dispatch(initializeApplication());
@@ -61,12 +62,31 @@ export function AppRoot(): React.JSX.Element {
       dispatch(setNetworkConnected(connected));
 
       if (previousConnected === false && connected) {
-        dispatch(runSyncNow('network-reconnected'));
+        dispatch(runSyncNow('network-reconnected', {ignoreRetryWindow: true}));
       }
     });
 
     return unsubscribe;
   }, [dispatch]);
+
+  useEffect(() => {
+    const previousFakeServerAvailable = previousFakeServerAvailableRef.current;
+    previousFakeServerAvailableRef.current = taskBoardState.fakeServerAvailable;
+
+    if (
+      previousFakeServerAvailable === false &&
+      taskBoardState.fakeServerAvailable &&
+      taskBoardState.networkConnected &&
+      queueLength > 0
+    ) {
+      dispatch(runSyncNow('fake-server-restored', {ignoreRetryWindow: true}));
+    }
+  }, [
+    dispatch,
+    taskBoardState.fakeServerAvailable,
+    taskBoardState.networkConnected,
+    queueLength,
+  ]);
 
   useEffect(() => {
     const registrationPromise = registerBackgroundSync(async () => {

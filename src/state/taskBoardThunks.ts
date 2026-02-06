@@ -86,7 +86,14 @@ function applyFakeServerFlagsFromCurrentState(rootState: RootState): void {
   }
 }
 
-export const runSyncNow = (reason: string): AppThunk<Promise<void>> => {
+interface RunSyncNowOptions {
+  ignoreRetryWindow?: boolean;
+}
+
+export const runSyncNow = (
+  reason: string,
+  options: RunSyncNowOptions = {},
+): AppThunk<Promise<void>> => {
   return async (dispatch, getState) => {
     if (getState().taskBoard.syncInProgress) {
       return;
@@ -102,6 +109,7 @@ export const runSyncNow = (reason: string): AppThunk<Promise<void>> => {
       const syncCycleReport = await runTaskSyncCycle({
         reason,
         deviceIsOnline: stateBeforeSync.taskBoard.networkConnected,
+        ignoreRetryWindow: Boolean(options.ignoreRetryWindow),
       });
 
       if (stateBeforeSync.taskBoard.forceConflictForNextSyncRequest) {

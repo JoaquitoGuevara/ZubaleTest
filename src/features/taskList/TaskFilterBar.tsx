@@ -29,9 +29,10 @@ export function TaskFilterBar({
         return (
           <Pressable
             key={filterOption}
-            style={[
+            style={({pressed}) => [
               styles.filterButton,
               filterIsActive ? styles.activeFilterButton : styles.inactiveFilterButton,
+              pressed ? styles.pressedBlackBackground : null,
             ]}
             onPress={() => onFilterChange(filterOption)}>
             <Text
@@ -67,6 +68,10 @@ const styles = StyleSheet.create({
   inactiveFilterButton: {
     backgroundColor: '#FFFFFF',
     borderColor: '#CBD5E1',
+  },
+  pressedBlackBackground: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
   },
   filterLabel: {
     fontSize: 12,

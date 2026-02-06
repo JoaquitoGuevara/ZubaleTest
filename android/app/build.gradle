@@ -76,6 +76,14 @@ android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
 
     namespace "com.zubaleofflineauditor"
     defaultConfig {
@@ -110,6 +118,7 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:${rootProject.ext.desugarJdkLibsVersion}")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

@@ -140,7 +140,9 @@ export function TaskDetailsScreen({
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      <Pressable style={styles.backButton} onPress={onGoBack}>
+      <Pressable
+        style={({pressed}) => [styles.backButton, pressed ? styles.pressedBlackBackground : null]}
+        onPress={onGoBack}>
         <Text style={styles.backButtonLabel}>Back to task list</Text>
       </Pressable>
 
@@ -161,9 +163,10 @@ export function TaskDetailsScreen({
               <Pressable
                 key={statusOption}
                 onPress={() => setDraftBusinessStatus(statusOption)}
-                style={[
+                style={({pressed}) => [
                   styles.statusButton,
                   statusIsSelected ? styles.statusButtonSelected : styles.statusButtonUnselected,
+                  pressed ? styles.pressedBlackBackground : null,
                 ]}>
                 <Text
                   style={[
@@ -194,7 +197,12 @@ export function TaskDetailsScreen({
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Photo evidence</Text>
 
-        <Pressable style={styles.photoActionButton} onPress={handleCapturePhoto}>
+        <Pressable
+          style={({pressed}) => [
+            styles.photoActionButton,
+            pressed ? styles.pressedBlackBackground : null,
+          ]}
+          onPress={handleCapturePhoto}>
           <Text style={styles.photoActionButtonLabel}>Capture photo</Text>
         </Pressable>
 
@@ -212,13 +220,19 @@ export function TaskDetailsScreen({
 
           <View style={styles.conflictActionsRow}>
             <Pressable
-              style={styles.acceptServerButton}
+              style={({pressed}) => [
+                styles.acceptServerButton,
+                pressed ? styles.pressedBlackBackground : null,
+              ]}
               onPress={() => onAcceptServerConflict(taskRecord.id)}>
               <Text style={styles.acceptServerButtonLabel}>Accept server</Text>
             </Pressable>
 
             <Pressable
-              style={styles.retryLocalButton}
+              style={({pressed}) => [
+                styles.retryLocalButton,
+                pressed ? styles.pressedBlackBackground : null,
+              ]}
               onPress={() => onRetryLocalConflict(taskRecord.id)}>
               <Text style={styles.retryLocalButtonLabel}>Retry local</Text>
             </Pressable>
@@ -227,9 +241,10 @@ export function TaskDetailsScreen({
       ) : null}
 
       <Pressable
-        style={[
+        style={({pressed}) => [
           styles.saveButton,
           !hasUnsavedChanges || savingInProgress ? styles.saveButtonDisabled : null,
+          pressed && hasUnsavedChanges && !savingInProgress ? styles.pressedBlackBackground : null,
         ]}
         disabled={!hasUnsavedChanges || savingInProgress}
         onPress={handleSaveChanges}>
@@ -254,6 +269,9 @@ const styles = StyleSheet.create({
   },
   backButton: {
     alignSelf: 'flex-start',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   backButtonLabel: {
     color: '#155EEF',
@@ -405,5 +423,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800',
+  },
+  pressedBlackBackground: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
   },
 });

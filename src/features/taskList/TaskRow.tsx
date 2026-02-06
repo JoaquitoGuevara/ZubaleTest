@@ -25,7 +25,9 @@ function TaskRowComponent({
   const syncBadgeText = getSyncStatusBadgeTextColor(taskRecord.syncStatus);
 
   return (
-    <Pressable style={styles.card} onPress={() => onSelectTask(taskRecord.id)}>
+    <Pressable
+      style={({pressed}) => [styles.card, pressed ? styles.pressedBlackBackground : null]}
+      onPress={() => onSelectTask(taskRecord.id)}>
       <View style={styles.headerRow}>
         <Text style={styles.taskTitle}>{taskRecord.title}</Text>
         <View style={[styles.syncBadge, {backgroundColor: syncBadgeBackground}]}>
@@ -59,6 +61,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     gap: 6,
+  },
+  pressedBlackBackground: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
   },
   headerRow: {
     flexDirection: 'row',
