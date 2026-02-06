@@ -13,6 +13,7 @@ import {
 import {launchCamera} from 'react-native-image-picker';
 import {Task, TaskPatch, TaskStatus} from '../../domain/taskModels';
 import {syncStatusLabel, taskStatusLabel} from '../../shared/taskPresentation';
+import {formatDateTime} from '../../shared/timeHelpers';
 
 interface TaskDetailsScreenProps {
   task: Task;
@@ -136,6 +137,7 @@ export function TaskDetailsScreen({
         <Text style={styles.title}>{task.title}</Text>
         <Text style={styles.metaLine}>Store: {task.location.address}</Text>
         <Text style={styles.metaLine}>Price: ${task.price.toFixed(2)}</Text>
+        <Text style={styles.metaLine}>Expires: {formatDateTime(task.expiresAt)}</Text>
         <Text style={styles.metaLine}>Sync: {syncStatusLabel(task.syncStatus)}</Text>
       </View>
 
@@ -192,7 +194,11 @@ export function TaskDetailsScreen({
 
         {cameraError ? <Text style={styles.errorText}>{cameraError}</Text> : null}
 
-        {draftImageUri ? <Image source={{uri: draftImageUri}} style={styles.photoPreview} /> : null}
+        {draftImageUri ? (
+          <Image source={{uri: draftImageUri}} style={styles.photoPreview} />
+        ) : (
+          <Text style={styles.metaLine}>Current image: None</Text>
+        )}
       </View>
 
       {hasConflict ? (

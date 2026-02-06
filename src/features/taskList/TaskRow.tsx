@@ -1,5 +1,5 @@
 import React from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {Image, Pressable, StyleSheet, Text, View} from 'react-native';
 import {Task} from '../../domain/taskModels';
 import {
   syncBadgeBg,
@@ -43,9 +43,19 @@ function TaskRowComponent({
       </View>
 
       <View style={styles.infoRow}>
+        <Text style={styles.infoText}>Expires: {formatDateTime(task.expiresAt)}</Text>
+      </View>
+
+      <View style={styles.infoRow}>
         <Text style={styles.infoText}>Updated: {formatDateTime(task.updatedAt)}</Text>
         {hasConflict ? <Text style={styles.conflictText}>Conflict pending</Text> : null}
       </View>
+
+      {task.imageUri ? (
+        <Image source={{uri: task.imageUri}} style={styles.previewImage} />
+      ) : (
+        <Text style={styles.infoText}>Image: None</Text>
+      )}
     </Pressable>
   );
 }
@@ -106,5 +116,11 @@ const styles = StyleSheet.create({
     color: '#8B1A1A',
     fontSize: 12,
     fontWeight: '700',
+  },
+  previewImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: 8,
+    backgroundColor: '#E2E8F0',
   },
 });
