@@ -1,6 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
 import React, {useEffect, useMemo, useRef} from 'react';
-import {SafeAreaView, StatusBar, StyleSheet, Text, View} from 'react-native';
+import {BackHandler, SafeAreaView, StatusBar, StyleSheet, Text, View} from 'react-native';
 import {DebugPanel} from '../features/debug/DebugPanel';
 import {TaskDetailsScreen} from '../features/taskDetails/TaskDetailsScreen';
 import {TaskListScreen} from '../features/taskList/TaskListScreen';
@@ -79,6 +79,24 @@ export function AppRoot(): React.JSX.Element {
       unregisterBackgroundSync().catch(() => undefined);
     };
   }, [dispatch]);
+
+  useEffect(() => {
+    if (!selectedTask) {
+      return;
+    }
+
+    const backPressSubscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        dispatch(setSelectedTaskId(null));
+        return true;
+      },
+    );
+
+    return () => {
+      backPressSubscription.remove();
+    };
+  }, [dispatch, selectedTask]);
 
   const conflictTaskIdSet = useMemo(() => {
     return new Set(allConflicts.map(conflictRecord => conflictRecord.taskId));
